@@ -1,7 +1,25 @@
 [project]
 name = "gerador-musical"
 version = "0.1.0"
-description = "Add your description here"
+description = "Gerador de eventos musicais a partir de texto para a Fase 1."
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.11"
 dependencies = []
+
+[project.optional-dependencies]
+audio = ["pyfluidsynth>=1.3.4"]
+dev = ["pytest>=8.0"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+markers = [
+    "integration: tests that require optional native audio dependencies",
+]
