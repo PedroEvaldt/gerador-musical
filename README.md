@@ -1,6 +1,7 @@
 # Gerador Musical
 
-Implementacao do nucleo da Fase 1 de um gerador de sequencias musicais a partir de texto.
+Implementacao do nucleo da Fase 1 e do nucleo polifonico da Fase 2 de um
+gerador de sequencias musicais a partir de texto.
 
 ## Objetivo da Fase 1
 
@@ -115,3 +116,37 @@ Use `playback_service.stop()` para interromper, `playback_service.is_playing()` 
 - Atrasos com `[n]`.
 - Alteracoes de BPM com `>` ou `<`.
 - Funcionalidades da Fase 2.
+
+## Nucleo da Fase 2
+
+A Fase 2 foi adicionada sem substituir a API da Fase 1. Use
+`PolyphonicSequenceGenerator` para interpretar cada linha como uma voz
+independente:
+
+```python
+from music_generator.application.playback_service import PlaybackService
+from music_generator.application.polyphonic_generator import PolyphonicSequenceGenerator
+from music_generator.infrastructure.audio.fluidsynth_player import FluidSynthPlayer
+
+text = "CDE\n[4] > MbG"
+
+composition = PolyphonicSequenceGenerator().generate(text)
+
+player = FluidSynthPlayer()
+playback_service = PlaybackService(player)
+playback_service.start(composition)
+```
+
+Caracteristicas implementadas:
+
+- vozes `V0`, `V1`, `V2`, ... por linha, preservando linhas vazias internas;
+- ciclo inicial de oitava, volume e instrumento a cada quatro vozes;
+- atraso inicial `[n]` por voz;
+- token `Mb` para Mi bemol;
+- estado local independente de volume, instrumento e oitava;
+- comandos globais de BPM com `>` e `<`;
+- timeline deterministica com beat absoluto, voz e ordem de origem;
+- reproducao polifonica com canais MIDI melodicos distintos, reservando o canal 9.
+
+Funcionalidades de interface para abrir/salvar TXT, exportar MIDI e escolher
+arquivo de saida continuam reservadas para integracao posterior.
