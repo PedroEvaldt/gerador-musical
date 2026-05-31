@@ -36,6 +36,13 @@ class MusicalState:
             self.current_octave = self.default_octave
         return self.current_octave
 
+    def decrease_octave_or_reset(self) -> int:
+        if self.current_octave > 0:
+            self.current_octave -= 1
+        else:
+            self.current_octave = self.default_octave
+        return self.current_octave
+
     def change_instrument(self, instrument_id: int) -> int:
         if not 0 <= instrument_id <= MAX_INSTRUMENT:
             raise ValueError("instrument_id must be between 0 and 127.")

@@ -1,7 +1,11 @@
 import threading
 
 from music_generator.domain.composition import MusicalComposition
+from music_generator.domain.polyphony import PolyphonicComposition
 from music_generator.infrastructure.audio.player import AudioPlayer
+
+
+PlayableComposition = MusicalComposition | PolyphonicComposition
 
 
 class PlaybackService:
@@ -11,7 +15,7 @@ class PlaybackService:
         self._thread: threading.Thread | None = None
         self._is_playing = False
 
-    def start(self, composition: MusicalComposition) -> None:
+    def start(self, composition: PlayableComposition) -> None:
         with self._lock:
             if self._is_playing:
                 raise RuntimeError("Playback is already running.")
@@ -43,7 +47,7 @@ class PlaybackService:
         self.stop()
         self._player.close()
 
-    def _run(self, composition: MusicalComposition) -> None:
+    def _run(self, composition: PlayableComposition) -> None:
         try:
             self._player.play(composition)
         finally:

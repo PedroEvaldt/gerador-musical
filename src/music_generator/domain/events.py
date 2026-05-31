@@ -5,6 +5,7 @@ from dataclasses import dataclass
 NOTE_SEMITONES: dict[str, int] = {
     "C": 0,
     "D": 2,
+    "MB": 3,
     "E": 4,
     "F": 5,
     "G": 7,
@@ -67,3 +68,22 @@ class VolumeChangeEvent(MusicalEvent):
 @dataclass(frozen=True, slots=True)
 class OctaveChangeEvent(MusicalEvent):
     octave: int
+
+
+@dataclass(frozen=True, slots=True)
+class BpmChangeEvent(MusicalEvent):
+    bpm: int
+
+    def __post_init__(self) -> None:
+        if self.bpm < 10:
+            raise ValueError("bpm must be greater than or equal to 10.")
+
+
+@dataclass(frozen=True, slots=True)
+class NoteStartEvent(MusicalEvent):
+    note: NoteEvent
+
+
+@dataclass(frozen=True, slots=True)
+class NoteEndEvent(MusicalEvent):
+    note: NoteEvent
