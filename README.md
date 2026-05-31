@@ -11,6 +11,8 @@ O sistema recebe um texto e configuracoes musicais iniciais, percorre o texto ca
 - `music_generator.domain`: configuracoes, estado musical, eventos e composicao.
 - `music_generator.application`: regras de interpretacao, interpretador, gerador de sequencia e servico de playback.
 - `music_generator.infrastructure.audio`: interface de player e adaptador concreto para FluidSynth.
+- `gui.py`: interface grafica Tkinter. Coleta texto e configuracoes, delega geracao e reproducao ao nucleo.
+
 
 A interpretacao do texto nao importa FluidSynth e nao depende de interface grafica. O player recebe uma `MusicalComposition` ja gerada.
 
@@ -46,6 +48,15 @@ export SOUNDFONT_PATH=/caminho/para/arquivo.sf2
 ```
 
 Tambem e possivel passar o caminho diretamente para `FluidSynthPlayer(soundfont_path="...")`.
+
+## Executar a interface grafica
+
+```bash
+cd src
+python gui.py
+```
+
+A janela permite inserir texto, ajustar BPM, oitava, volume e instrumento inicial, e controlar a reproducao com os botoes play e pause.
 
 ## Executar testes
 
