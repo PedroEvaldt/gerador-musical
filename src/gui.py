@@ -5,7 +5,7 @@ Arquivo: src/gui.py
 
 import threading
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, filedialog
 
 from music_generator.application.playback_service import PlaybackService
 from music_generator.application.sequence_generator import SequenceGenerator
@@ -99,6 +99,43 @@ class MusicGeneratorApp(tk.Tk):
         )
         self._text_box.pack(fill=tk.BOTH, pady=(4, 0))
 
+        # ── Botões da Área de Texto ─────────────────────────────────────
+        text_btn_frame = tk.Frame(text_frame, bg="#d0d0d0")
+        text_btn_frame.pack(fill=tk.X)
+        
+        # Botão import
+        tk.Button(
+            text_btn_frame,
+            text="Importar .txt",
+            font=("Arial", 10),
+            command=self._on_import_file,
+            relief=tk.RAISED,
+            bg="#d0d0d0",
+            padx=10,
+        ).pack(side=tk.LEFT, padx=(0, 10))
+
+        # Botão salvar
+        tk.Button(
+            text_btn_frame,
+            text="Salvar .txt",
+            font=("Arial", 10),
+            command=self._on_save_file,
+            relief=tk.RAISED,
+            bg="#d0d0d0",
+            padx=10,
+        ).pack(side=tk.LEFT, padx=(0, 10))
+        
+        # Botão limpar texto
+        tk.Button(
+            text_btn_frame,
+            text="Limpar Texto",
+            font=("Arial", 10),
+            command=self._on_clear,
+            relief=tk.RAISED,
+            bg="#d0d0d0",
+            padx=10,
+        ).pack(side=tk.LEFT)
+       
         # ── Configurações ───────────────────────────────────────────────
         config_frame = tk.Frame(self, bg="#808080", padx=20, pady=14)
         config_frame.pack(fill=tk.X)
@@ -212,17 +249,6 @@ class MusicGeneratorApp(tk.Tk):
         )
         self._pause_btn.pack(side=tk.LEFT, padx=(0, 10))
 
-        # Botão limpar texto
-        tk.Button(
-            control_frame,
-            text="Limpar Texto",
-            font=("Arial", 11),
-            command=self._on_clear,
-            relief=tk.RAISED,
-            bg="#d0d0d0",
-            padx=10,
-        ).pack(side=tk.LEFT, padx=(0, 20))
-
         # Tempo decorrido
         self._time_label = tk.Label(
             control_frame,
@@ -261,6 +287,45 @@ class MusicGeneratorApp(tk.Tk):
     # Handlers
     # ------------------------------------------------------------------
 
+    def _on_import_file(self) -> None:
+        """Abre uma janela para selecionar um arquivo .txt e joga o conteúdo na caixa de texto."""
+        file_path = filedialog.askopenfilename(
+            title="Selecionar arquivo de texto",
+            filetypes=[("Arquivos de Texto", "*.txt"), ("Todos os arquivos", "*.*")]
+        )
+        
+        if file_path:
+            try:
+                with open(file_path, "r", encoding="utf-8") as file:
+                    content = file.read()
+                
+                # Limpa a caixa de texto atual e insere o conteúdo novo
+                self._text_box.delete("1.0", tk.END)
+                self._text_box.insert(tk.END, content)
+            except Exception as exc:
+                messagebox.showerror("Erro de leitura", f"Não foi possível ler o arquivo:\n{exc}")
+    
+    def _on_save_file(self) -> None:
+        """Abre uma janela para salvar o conteúdo atual da caixa de texto em um arquivo .txt."""
+        content = self._text_box.get("1.0", tk.END).strip()
+        if not content:
+            messagebox.showwarning("Texto vazio", "Não há texto digitado para salvar.")
+            return
+
+        file_path = filedialog.asksaveasfilename(
+            title="Salvar arquivo de texto",
+            defaultextension=".txt",
+            filetypes=[("Arquivos de Texto", "*.txt"), ("Todos os arquivos", "*.*")]
+        )
+        
+        if file_path:
+            try:
+                with open(file_path, "w", encoding="utf-8") as file:
+                    file.write(content)
+                self._status_var.set("Texto salvo com sucesso!")
+            except Exception as exc:
+                messagebox.showerror("Erro ao salvar", f"Não foi possível salvar o arquivo:\n{exc}")
+                
     def _on_play(self) -> None:
         """Inicia a reprodução a partir do texto e configurações atuais."""
         if self._playback_service and self._playback_service.is_playing():
