@@ -89,7 +89,7 @@ class TestInicializacao:
         assert app._octave_var.get() == 4
 
     def test_valores_padrao_instrumento(self, app):
-        assert app._instrument_var.get() == "Piano"
+        assert app._instrument_var.get() == next(iter(INSTRUMENTS))  # primeiro instrumento do dicionário
 
     def test_valores_padrao_volume(self, app):
         assert 0 <= app._volume_var.get() <= 127
@@ -158,7 +158,7 @@ class TestBuildSettings:
 
 class TestMapeamentoInstrumentos:
     def test_piano_e_midi_zero(self):
-        assert INSTRUMENTS["Piano"] == 0
+        assert INSTRUMENTS["Piano Acústico (Grand)"] == 0
 
     def test_todos_indices_no_range_midi(self):
         for nome, idx in INSTRUMENTS.items():
