@@ -148,5 +148,34 @@ Caracteristicas implementadas:
 - timeline deterministica com beat absoluto, voz e ordem de origem;
 - reproducao polifonica com canais MIDI melodicos distintos, reservando o canal 9.
 
-Funcionalidades de interface para abrir/salvar TXT, exportar MIDI e escolher
-arquivo de saida continuam reservadas para integracao posterior.
+## Exportacao MIDI
+
+A composicao polifonica pode ser exportada para um arquivo `.mid` com
+`MidiExporter`, sem depender de FluidSynth ou de qualquer biblioteca de audio:
+
+```python
+from music_generator.application.polyphonic_generator import PolyphonicSequenceGenerator
+from music_generator.infrastructure.midi.midi_exporter import MidiExporter
+
+composition = PolyphonicSequenceGenerator().generate("CDE\n[4] > MbG")
+
+MidiExporter().export(composition, "saida.mid")
+```
+
+Caracteristicas do exportador:
+
+- uma faixa MIDI por voz, mais uma faixa global de tempo (`set_tempo`);
+- cada voz usa um canal MIDI melodico distinto (`MELODIC_CHANNELS`), reservando o canal 9 para percussao, igual ao `FluidSynthPlayer`;
+- `program_change` por voz refletindo o instrumento inicial de cada uma;
+- mudancas de BPM (`>` e `<`) geram novas mensagens `set_tempo` na faixa de tempo;
+- resolucao de 480 ticks por semínima (`MidiExporter.TICKS_PER_BEAT`).
+
+## Interface grafica (Fase 2)
+
+A interface (`gui.py`) ja consome o nucleo polifonico da Fase 2 e oferece:
+
+- importar texto de um arquivo `.txt` e editar no campo de texto;
+- salvar o conteudo do campo de texto em `.txt`, com escolha de nome e diretorio;
+- exportar a composicao atual para `.mid`, com escolha de nome e diretorio;
+- selecionar o instrumento inicial entre os 128 instrumentos do padrao General MIDI;
+- ajustar BPM, oitava padrao e volume inicial antes de reproduzir ou exportar.
