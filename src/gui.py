@@ -1,184 +1,68 @@
 """
 Interface gráfica do Gerador de Música por Texto.
 Arquivo: src/gui.py
+
+Esta classe é responsável apenas por construir os widgets do Tkinter e
+conectar eventos da interface aos colaboradores que de fato implementam
+cada funcionalidade (arquivos de texto, exportação MIDI, reprodução).
+Toda a lógica de negócio foi extraída para
+`music_generator.gui.*`, mantendo `MusicGeneratorApp` com uma única
+responsabilidade: orquestrar a interface (princípio da Responsabilidade
+Única). As dependências concretas (player de áudio, catálogo de
+instrumentos, serviços) são recebidas no construtor em vez de
+instanciadas internamente, para que a classe dependa apenas de
+abstrações e possa ser testada com dublês (princípio da Inversão de
+Dependência).
 """
 
-import threading
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 
-from music_generator.application.playback_service import PlaybackService
-from music_generator.application.polyphonic_generator import PolyphonicSequenceGenerator
 from music_generator.domain.settings import PlaybackSettings
+from music_generator.gui.instrument_catalog import InstrumentCatalog, InMemoryInstrumentCatalog
+from music_generator.gui.midi_export_service import MidiExportService
+from music_generator.gui.playback_controller import PlaybackController
+from music_generator.gui.text_file_service import TextFileService
 from music_generator.infrastructure.audio.fluidsynth_player import FluidSynthPlayer
-from music_generator.infrastructure.midi.midi_exporter import MidiExporter
 
-
-# Mapeamento de nome legível → índice MIDI General MIDI
-INSTRUMENTS: dict[str, int] = {
-    # Pianos (0–7)
-    "Piano Acústico (Grand)": 0,
-    "Piano Acústico (Bright)": 1,
-    "Piano Elétrico Grande": 2,
-    "Honky-Tonk Piano": 3,
-    "Piano Elétrico 1 (Rhodes)": 4,
-    "Piano Elétrico 2 (Chorus)": 5,
-    "Cravo": 6,
-    "Clavicórdio": 7,
-    # Instrumentos de Teclas Cromáticas (8–15)
-    "Celesta": 8,
-    "Glockenspiel": 9,
-    "Caixinha de Música": 10,
-    "Vibrafone": 11,
-    "Marimba": 12,
-    "Xilofone": 13,
-    "Sinos Tubulares": 14,
-    "Dulcimer": 15,
-    # Órgãos (16–23)
-    "Órgão Hammond": 16,
-    "Órgão Percussivo": 17,
-    "Órgão de Rock": 18,
-    "Órgão de Igreja": 19,
-    "Órgão de Reed": 20,
-    "Acordeão": 21,
-    "Harmônica": 22,
-    "Bandoneón": 23,
-    # Guitarras (24–31)
-    "Violão (Nylon)": 24,
-    "Violão (Aço)": 25,
-    "Guitarra Jazz": 26,
-    "Guitarra Limpa": 27,
-    "Guitarra Muted": 28,
-    "Guitarra Overdrive": 29,
-    "Guitarra Distorção": 30,
-    "Guitarra Harmonics": 31,
-    # Baixos (32–39)
-    "Contrabaixo Acústico": 32,
-    "Baixo Elétrico (Dedos)": 33,
-    "Baixo Elétrico (Palheta)": 34,
-    "Baixo Fretless": 35,
-    "Baixo Slap 1": 36,
-    "Baixo Slap 2": 37,
-    "Baixo Synth 1": 38,
-    "Baixo Synth 2": 39,
-    # Cordas (40–47)
-    "Violino": 40,
-    "Viola": 41,
-    "Violoncelo": 42,
-    "Contrabaixo": 43,
-    "Cordas Tremolo": 44,
-    "Cordas Pizzicato": 45,
-    "Harpa Orquestral": 46,
-    "Tímpano": 47,
-    # Ensemble de Cordas (48–55)
-    "Ensemble de Cordas 1": 48,
-    "Ensemble de Cordas 2": 49,
-    "Cordas Synth 1": 50,
-    "Cordas Synth 2": 51,
-    "Coro Ahh": 52,
-    "Voz Ooh": 53,
-    "Voz Synth": 54,
-    "Hit Orquestral": 55,
-    # Metais (56–63)
-    "Trompete": 56,
-    "Trombone": 57,
-    "Tuba": 58,
-    "Trompete Muted": 59,
-    "Trompa Francesa": 60,
-    "Seção de Metais": 61,
-    "Trompete Synth": 62,
-    "Trombone Synth": 63,
-    # Reed (64–71)
-    "Soprano Sax": 64,
-    "Alto Sax": 65,
-    "Tenor Sax": 66,
-    "Barítono Sax": 67,
-    "Oboé": 68,
-    "Corne Inglês": 69,
-    "Fagote": 70,
-    "Clarinete": 71,
-    # Palhetas / Flautas (72–79)
-    "Piccolo": 72,
-    "Flauta": 73,
-    "Recorder": 74,
-    "Flauta Pan": 75,
-    "Garrafa Soprada": 76,
-    "Shakuhachi": 77,
-    "Assobio": 78,
-    "Ocarina": 79,
-    # Synth Lead (80–87)
-    "Lead Quadrado": 80,
-    "Lead Serrilhado": 81,
-    "Lead Calliope": 82,
-    "Lead Chiff": 83,
-    "Lead Charang": 84,
-    "Lead Voz": 85,
-    "Lead Fifths": 86,
-    "Lead Bass + Lead": 87,
-    # Synth Pad (88–95)
-    "Pad New Age": 88,
-    "Pad Warm": 89,
-    "Pad Polysynth": 90,
-    "Pad Choir": 91,
-    "Pad Bowed": 92,
-    "Pad Metallic": 93,
-    "Pad Halo": 94,
-    "Pad Sweep": 95,
-    # Synth FX (96–103)
-    "FX Rain": 96,
-    "FX Soundtrack": 97,
-    "FX Crystal": 98,
-    "FX Atmosphere": 99,
-    "FX Brightness": 100,
-    "FX Goblins": 101,
-    "FX Echoes": 102,
-    "FX Sci-Fi": 103,
-    # Étnico (104–111)
-    "Sitar": 104,
-    "Banjo": 105,
-    "Shamisen": 106,
-    "Koto": 107,
-    "Kalimba": 108,
-    "Gaita de Foles": 109,
-    "Fiddle": 110,
-    "Shanai": 111,
-    # Percussivo (112–119)
-    "Sino Tinkle": 112,
-    "Agogô": 113,
-    "Steel Drum": 114,
-    "Woodblock": 115,
-    "Taiko Drum": 116,
-    "Tom Melódico": 117,
-    "Bombo Synth": 118,
-    "Prato Synth": 119,
-    # Efeitos Sonoros (120–127)
-    "Guitarra Fret Noise": 120,
-    "Breath Noise": 121,
-    "Litoral": 122,
-    "Pássaros": 123,
-    "Telefone": 124,
-    "Helicóptero": 125,
-    "Aplausos": 126,
-    "Tiro de Pistola": 127,
-}
 
 DEFAULT_BPM = 180
 DEFAULT_OCTAVE = 4
 DEFAULT_VOLUME = 64  # meio do slider (0–127)
 
+# Caminho do SoundFont mantido como estava: cada ambiente de execução
+# pode precisar de um caminho diferente; ajuste aqui se necessário.
+DEFAULT_SOUNDFONT_PATH = "C:\\mysoundfont\\FluidR3_GM.sf2"
+
+
+def _default_player_factory() -> FluidSynthPlayer:
+    return FluidSynthPlayer(soundfont_path=DEFAULT_SOUNDFONT_PATH)
+
 
 class MusicGeneratorApp(tk.Tk):
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        instrument_catalog: InstrumentCatalog | None = None,
+        text_file_service: TextFileService | None = None,
+        midi_export_service: MidiExportService | None = None,
+        playback_controller: PlaybackController | None = None,
+    ) -> None:
         super().__init__()
 
         self.title("INF01120 - Gerador de Música por Texto")
         self.resizable(False, False)
         self.configure(bg="#d0d0d0")
 
-        # Estado de playback
-        self._playback_service: PlaybackService | None = None
-        self._is_paused = False
-        self._composition = None
+        # Colaboradores injetáveis — cada um com uma única responsabilidade.
+        # Os padrões abaixo preservam o comportamento atual do app quando
+        # nenhuma dependência é informada (uso normal via main()).
+        self._instrument_catalog = instrument_catalog or InMemoryInstrumentCatalog()
+        self._text_file_service = text_file_service or TextFileService()
+        self._midi_export_service = midi_export_service or MidiExportService()
+        self._playback_controller = playback_controller or PlaybackController(
+            player_factory=_default_player_factory,
+        )
+
         self._progress_job: str | None = None
 
         self._build_ui()
@@ -227,7 +111,7 @@ class MusicGeneratorApp(tk.Tk):
         # ── Botões da Área de Texto ─────────────────────────────────────
         text_btn_frame = tk.Frame(text_frame, bg="#d0d0d0")
         text_btn_frame.pack(fill=tk.X)
-        
+
         # Botão import
         tk.Button(
             text_btn_frame,
@@ -249,7 +133,7 @@ class MusicGeneratorApp(tk.Tk):
             bg="#d0d0d0",
             padx=10,
         ).pack(side=tk.LEFT, padx=(0, 10))
-        
+
         # Botão limpar texto
         tk.Button(
             text_btn_frame,
@@ -271,7 +155,7 @@ class MusicGeneratorApp(tk.Tk):
             bg="#d0d0d0",
             padx=10,
         ).pack(side=tk.LEFT, padx=(10, 0))
-       
+
         # ── Configurações ───────────────────────────────────────────────
         config_frame = tk.Frame(self, bg="#808080", padx=20, pady=14)
         config_frame.pack(fill=tk.X)
@@ -288,12 +172,11 @@ class MusicGeneratorApp(tk.Tk):
         tk.Label(config_frame, text="Instrumento inicial:", bg="#808080", fg="white").grid(
             row=1, column=0, sticky="w", padx=(0, 8)
         )
-        self._instrument_var = tk.StringVar(value=next(iter(INSTRUMENTS)))
-        instrument_names = list(INSTRUMENTS.keys())
+        self._instrument_var = tk.StringVar(value=self._instrument_catalog.default_name())
         self._instrument_combo = ttk.Combobox(
             config_frame,
             textvariable=self._instrument_var,
-            values=instrument_names,
+            values=list(self._instrument_catalog.names()),
             state="readonly",
             width=18,
         )
@@ -420,7 +303,9 @@ class MusicGeneratorApp(tk.Tk):
         ).pack(side=tk.LEFT)
 
     # ------------------------------------------------------------------
-    # Handlers
+    # Handlers — cada um delega a lógica de negócio ao colaborador
+    # responsável, mantendo aqui apenas leitura de widgets e feedback
+    # visual (mensagens, status, habilitação de botões).
     # ------------------------------------------------------------------
 
     def _on_import_file(self) -> None:
@@ -429,18 +314,19 @@ class MusicGeneratorApp(tk.Tk):
             title="Selecionar arquivo de texto",
             filetypes=[("Arquivos de Texto", "*.txt"), ("Todos os arquivos", "*.*")]
         )
-        
-        if file_path:
-            try:
-                with open(file_path, "r", encoding="utf-8") as file:
-                    content = file.read()
-                
-                # Limpa a caixa de texto atual e insere o conteúdo novo
-                self._text_box.delete("1.0", tk.END)
-                self._text_box.insert(tk.END, content)
-            except Exception as exc:
-                messagebox.showerror("Erro de leitura", f"Não foi possível ler o arquivo:\n{exc}")
-    
+
+        if not file_path:
+            return
+
+        try:
+            content = self._text_file_service.read(file_path)
+        except Exception as exc:
+            messagebox.showerror("Erro de leitura", f"Não foi possível ler o arquivo:\n{exc}")
+            return
+
+        self._text_box.delete("1.0", tk.END)
+        self._text_box.insert(tk.END, content)
+
     def _on_save_file(self) -> None:
         """Abre uma janela para salvar o conteúdo atual da caixa de texto em um arquivo .txt."""
         content = self._text_box.get("1.0", tk.END).strip()
@@ -453,18 +339,19 @@ class MusicGeneratorApp(tk.Tk):
             defaultextension=".txt",
             filetypes=[("Arquivos de Texto", "*.txt"), ("Todos os arquivos", "*.*")]
         )
-        
-        if file_path:
-            try:
-                with open(file_path, "w", encoding="utf-8") as file:
-                    file.write(content)
-                self._status_var.set("Texto salvo com sucesso!")
-            except Exception as exc:
-                messagebox.showerror("Erro ao salvar", f"Não foi possível salvar o arquivo:\n{exc}")
-                
+
+        if not file_path:
+            return
+
+        try:
+            self._text_file_service.write(file_path, content)
+            self._status_var.set("Texto salvo com sucesso!")
+        except Exception as exc:
+            messagebox.showerror("Erro ao salvar", f"Não foi possível salvar o arquivo:\n{exc}")
+
     def _on_play(self) -> None:
         """Inicia a reprodução a partir do texto e configurações atuais."""
-        if self._playback_service and self._playback_service.is_playing():
+        if self._playback_controller.is_playing():
             return
 
         text = self._text_box.get("1.0", tk.END).strip()
@@ -479,59 +366,31 @@ class MusicGeneratorApp(tk.Tk):
             return
 
         try:
-            composition = PolyphonicSequenceGenerator().generate(text, settings)
+            self._playback_controller.start(text, settings)
         except Exception as exc:
-            messagebox.showerror("Erro ao gerar composição", str(exc))
+            messagebox.showerror("Erro ao reproduzir", str(exc))
             return
-
-        try:
-            player = FluidSynthPlayer(soundfont_path="C:\\mysoundfont\\FluidR3_GM.sf2")
-        except Exception as exc:
-            messagebox.showerror("Erro de áudio", str(exc))
-            return
-
-        self._composition = composition
-        self._playback_service = PlaybackService(player)
-        self._is_paused = False
-
-        self._playback_service.start(composition)
 
         self._play_btn.config(state=tk.DISABLED)
-        self._pause_btn.config(state=tk.NORMAL)
+        self._pause_btn.config(state=tk.NORMAL, text="⏸")
 
-        # Calcula duração total estimada a partir da última entrada no timeline
-        seconds_per_beat = 60.0 / settings.bpm
-        if composition.timeline:
-            self._total_seconds = composition.timeline[-1].absolute_beat * seconds_per_beat
-        else:
-            self._total_seconds = 0.0
-        self._elapsed_seconds = 0.0
         self._progress["value"] = 0
-
         self._status_var.set("Reproduzindo...")
         self._tick_progress()
 
     def _on_pause(self) -> None:
         """Alterna entre pause e retomada (stop/start simples, pois não há seek)."""
-        if not self._playback_service:
-            return
-
-        if self._playback_service.is_playing():
-            self._playback_service.stop()
-            self._is_paused = True
+        if self._playback_controller.is_playing():
+            self._playback_controller.pause()
             self._pause_btn.config(text="▶▶")
             self._status_var.set("Pausado")
             if self._progress_job:
                 self.after_cancel(self._progress_job)
         else:
-            # Retoma do início (sem seek disponível na engine)
-            self._is_paused = False
             self._pause_btn.config(text="⏸")
-            if self._composition:
-                self._playback_service.start(self._composition)
-                self._status_var.set("Reproduzindo...")
-                self._elapsed_seconds = 0.0
-                self._tick_progress()
+            self._playback_controller.resume()
+            self._status_var.set("Reproduzindo...")
+            self._tick_progress()
 
     def _on_clear(self) -> None:
         self._text_box.delete("1.0", tk.END)
@@ -549,12 +408,6 @@ class MusicGeneratorApp(tk.Tk):
             messagebox.showerror("Configuração inválida", str(exc))
             return
 
-        try:
-            composition = PolyphonicSequenceGenerator().generate(text, settings)
-        except Exception as exc:
-            messagebox.showerror("Erro ao gerar composição", str(exc))
-            return
-
         file_path = filedialog.asksaveasfilename(
             title="Exportar arquivo MIDI",
             defaultextension=".mid",
@@ -564,14 +417,13 @@ class MusicGeneratorApp(tk.Tk):
             return  # usuário cancelou
 
         try:
-            MidiExporter().export(composition, file_path)
+            self._midi_export_service.export(text, settings, file_path)
             self._status_var.set(f"MIDI exportado: {file_path}")
         except Exception as exc:
             messagebox.showerror("Erro ao exportar MIDI", f"Não foi possível salvar o arquivo:\n{exc}")
 
     def _on_close(self) -> None:
-        if self._playback_service:
-            self._playback_service.close()
+        self._playback_controller.close()
         self.destroy()
 
     # ------------------------------------------------------------------
@@ -583,12 +435,14 @@ class MusicGeneratorApp(tk.Tk):
             bpm=self._bpm_var.get(),
             initial_volume=self._volume_var.get(),
             default_octave=self._octave_var.get(),
-            initial_instrument=INSTRUMENTS[self._instrument_var.get()],
+            initial_instrument=self._instrument_catalog.midi_program(
+                self._instrument_var.get()
+            ),
         )
 
     def _tick_progress(self) -> None:
         """Atualiza barra de progresso e tempo a cada 200 ms."""
-        if not self._playback_service or not self._playback_service.is_playing():
+        if not self._playback_controller.is_playing():
             self._play_btn.config(state=tk.NORMAL)
             self._pause_btn.config(state=tk.DISABLED, text="⏸")
             self._status_var.set("Pronto")
@@ -596,15 +450,12 @@ class MusicGeneratorApp(tk.Tk):
             self._time_label.config(text="00:00")
             return
 
-        self._elapsed_seconds += 0.2
-        if self._total_seconds > 0:
-            pct = min(self._elapsed_seconds / self._total_seconds * 100, 100)
-        else:
-            pct = 0
-        self._progress["value"] = pct
+        percentage = self._playback_controller.advance_progress(0.2)
+        self._progress["value"] = percentage
 
-        mins = int(self._elapsed_seconds) // 60
-        secs = int(self._elapsed_seconds) % 60
+        elapsed = self._playback_controller.elapsed_seconds
+        mins = int(elapsed) // 60
+        secs = int(elapsed) % 60
         self._time_label.config(text=f"{mins:02d}:{secs:02d}")
 
         self._progress_job = self.after(200, self._tick_progress)
