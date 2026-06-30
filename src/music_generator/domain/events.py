@@ -37,7 +37,7 @@ class MusicalEvent(ABC):
     def __new__(cls, *args: object, **kwargs: object) -> "MusicalEvent":
         if cls is MusicalEvent:
             raise TypeError("MusicalEvent is an abstract base class.")
-        return super().__new__(cls)
+        return object.__new__(cls)
 
 
 @dataclass(frozen=True, slots=True)
