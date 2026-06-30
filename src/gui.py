@@ -8,9 +8,10 @@ import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 
 from music_generator.application.playback_service import PlaybackService
-from music_generator.application.sequence_generator import SequenceGenerator
+from music_generator.application.polyphonic_generator import PolyphonicSequenceGenerator
 from music_generator.domain.settings import PlaybackSettings
 from music_generator.infrastructure.audio.fluidsynth_player import FluidSynthPlayer
+from music_generator.infrastructure.midi.midi_exporter import MidiExporter
 
 
 # Mapeamento de nome legível → índice MIDI General MIDI
@@ -259,6 +260,17 @@ class MusicGeneratorApp(tk.Tk):
             bg="#d0d0d0",
             padx=10,
         ).pack(side=tk.LEFT)
+
+        # Botão exportar MIDI
+        tk.Button(
+            text_btn_frame,
+            text="Exportar MIDI (.mid)",
+            font=("Arial", 10),
+            command=self._on_export_midi,
+            relief=tk.RAISED,
+            bg="#d0d0d0",
+            padx=10,
+        ).pack(side=tk.LEFT, padx=(10, 0))
        
         # ── Configurações ───────────────────────────────────────────────
         config_frame = tk.Frame(self, bg="#808080", padx=20, pady=14)
@@ -467,13 +479,13 @@ class MusicGeneratorApp(tk.Tk):
             return
 
         try:
-            composition = SequenceGenerator().generate(text, settings)
+            composition = PolyphonicSequenceGenerator().generate(text, settings)
         except Exception as exc:
             messagebox.showerror("Erro ao gerar composição", str(exc))
             return
 
         try:
-            player = FluidSynthPlayer("C:\soundfont\FluidR3_GM.sf2")  # Substitua pelo caminho correto do seu SoundFont
+            player = FluidSynthPlayer(soundfont_path="C:\\mysoundfont\\FluidR3_GM.sf2")
         except Exception as exc:
             messagebox.showerror("Erro de áudio", str(exc))
             return
@@ -487,12 +499,12 @@ class MusicGeneratorApp(tk.Tk):
         self._play_btn.config(state=tk.DISABLED)
         self._pause_btn.config(state=tk.NORMAL)
 
-        # Calcula duração total estimada
+        # Calcula duração total estimada a partir da última entrada no timeline
         seconds_per_beat = 60.0 / settings.bpm
-        total_beats = sum(
-            getattr(ev, "duration_beats", 0) for ev in composition.events
-        )
-        self._total_seconds = total_beats * seconds_per_beat
+        if composition.timeline:
+            self._total_seconds = composition.timeline[-1].absolute_beat * seconds_per_beat
+        else:
+            self._total_seconds = 0.0
         self._elapsed_seconds = 0.0
         self._progress["value"] = 0
 
@@ -523,6 +535,39 @@ class MusicGeneratorApp(tk.Tk):
 
     def _on_clear(self) -> None:
         self._text_box.delete("1.0", tk.END)
+
+    def _on_export_midi(self) -> None:
+        """Gera a composição polifônica e salva como arquivo .mid escolhido pelo usuário."""
+        text = self._text_box.get("1.0", tk.END).strip()
+        if not text:
+            messagebox.showwarning("Texto vazio", "Insira algum texto antes de exportar.")
+            return
+
+        try:
+            settings = self._build_settings()
+        except ValueError as exc:
+            messagebox.showerror("Configuração inválida", str(exc))
+            return
+
+        try:
+            composition = PolyphonicSequenceGenerator().generate(text, settings)
+        except Exception as exc:
+            messagebox.showerror("Erro ao gerar composição", str(exc))
+            return
+
+        file_path = filedialog.asksaveasfilename(
+            title="Exportar arquivo MIDI",
+            defaultextension=".mid",
+            filetypes=[("Arquivo MIDI", "*.mid"), ("Todos os arquivos", "*.*")],
+        )
+        if not file_path:
+            return  # usuário cancelou
+
+        try:
+            MidiExporter().export(composition, file_path)
+            self._status_var.set(f"MIDI exportado: {file_path}")
+        except Exception as exc:
+            messagebox.showerror("Erro ao exportar MIDI", f"Não foi possível salvar o arquivo:\n{exc}")
 
     def _on_close(self) -> None:
         if self._playback_service:
