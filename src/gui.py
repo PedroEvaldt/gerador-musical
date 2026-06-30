@@ -288,7 +288,7 @@ class MusicGeneratorApp(tk.Tk):
         tk.Label(config_frame, text="Instrumento inicial:", bg="#808080", fg="white").grid(
             row=1, column=0, sticky="w", padx=(0, 8)
         )
-        self._instrument_var = tk.StringVar(value="")
+        self._instrument_var = tk.StringVar(value=next(iter(INSTRUMENTS)))
         instrument_names = list(INSTRUMENTS.keys())
         self._instrument_combo = ttk.Combobox(
             config_frame,
